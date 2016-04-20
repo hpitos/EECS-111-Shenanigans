@@ -11,7 +11,7 @@ typedef struct _shd_mem {
 	int* A;
 	int* B;
 	int ch_num;
-	pid_t* children;..
+	pid_t* children;
 } shd_mem;
 
 
@@ -47,11 +47,11 @@ int main(int argc, char** argv) {
 		shared_memory = (int*)shmat(shmid, NULL,0);
 		shd_matrix = (shd_mem*)shared_memory;
 
-		shd_matrix->A = (int*)malloc(matrix_size * matrix_size);
-		shd_matrix->B = (int*)malloc(matrix_size * matrix_size);
+		shd_matrix->A = (int*)malloc(sizeof(int)*matrix_size * matrix_size);
+		shd_matrix->B = (int*)malloc(sizeof(int)*matrix_size * matrix_size);
 
 		// allocate shared memory for result		
-		shm_2d = shmget(IPC_PRIVATE, matrix_size * matrix_size, IPC_CREAT | 0666);
+		shm_2d = shmget(IPC_PRIVATE, sizeof(int)*matrix_size * matrix_size, IPC_CREAT | 0666);
 		output = (int*)shmat(shm_2d, NULL, 0);
 
 
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
 
 
 		for(i = 0; i < thread_num; i++) {
-			if (shm_matrix->children != NULL) {			
+			if (pid != 0) {			
 				pid = fork();
 				shd_matrix->children[i] = getpid();
 			}
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
 			start = order;
 			end = order + matrix_size / thread_num;
 			
-			for (i=start;i<end;i++) {
+			for (i=start;i<=end;i++) {
 				for (j=0;j<matrix_size;j++) {
 					sum=0;
 					for (e=0;e<matrix_size;e++) {
@@ -113,14 +113,14 @@ int main(int argc, char** argv) {
 
 			// wait completion of children
 			wait();
-			C_parent = (int*)malloc(matrix_size * matrix_size);
+			C_parent = (int*)malloc(sizeof(int)*matrix_size * matrix_size);
 	
 			for (i=0;i<matrix_size;i++) {
 				for (j=0;j<matrix_size;j++) {
 					sum=0;
 					for (e=0;e<matrix_size;e++) {						
 						sum+=shd_matrix->A[e + i * matrix_size]*shd_matrix->B[e * matrix_size + j];
-					}	.
+					}	
 					C_parent[j + i*matrix_size]=sum;
 				}
 			}
