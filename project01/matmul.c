@@ -11,7 +11,7 @@ typedef struct _shd_mem {
 	int* A;
 	int* B;
 	int ch_num;
-	pid_t* children;
+	pid_t* children;..
 } shd_mem;
 
 
@@ -94,14 +94,14 @@ int main(int argc, char** argv) {
 			}
 			
 			printf("Child process (%d)...\n", order);
-			start = 0;
-			end = /* fill here */;
+			start = order;
+			end = order + matrix_size / thread_num;
 			
-			for (i=0;i<matrix_size;i++) {
+			for (i=start;i<end;i++) {
 				for (j=0;j<matrix_size;j++) {
 					sum=0;
 					for (e=0;e<matrix_size;e++) {
-						sum+=shd_matrix->A[e + j * matrix_size]*shd_matrix->B[e * matrix_size + j];
+						sum+=shd_matrix->A[e + i * matrix_size]*shd_matrix->B[e * matrix_size + j];
 					}
 					output[j + i*matrix_size]=sum;
 				}
@@ -113,15 +113,15 @@ int main(int argc, char** argv) {
 
 			// wait completion of children
 			wait();
-			C_parent = (int*)malloc(/* fill here */);
+			C_parent = (int*)malloc(matrix_size * matrix_size);
 	
 			for (i=0;i<matrix_size;i++) {
 				for (j=0;j<matrix_size;j++) {
 					sum=0;
 					for (e=0;e<matrix_size;e++) {						
-						sum+=shd_matrix->A[/* fill here */]*shd_matrix->B[/* fill here */];
+						sum+=shd_matrix->A[e + i * matrix_size]*shd_matrix->B[e * matrix_size + j];
 					}	.
-					C_parent[/* fill here */]=sum;
+					C_parent[j + i*matrix_size]=sum;
 				}
 			}
 
