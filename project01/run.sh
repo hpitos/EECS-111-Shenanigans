@@ -11,9 +11,9 @@ do
 	for t in $child_number
 	do	
 		echo "Execute matrixmul $m $t"
-		tmp=$(./matmul | grep -o Child | wc -l)
+		tmp=$(./matrixmul | grep -o Child | wc -l)
 		# Fill here
-		total_child=$((...+...))
+		total_child=$((total_child + tmp))
 	done
 done
 
