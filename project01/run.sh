@@ -13,12 +13,13 @@ do
 		echo "Execute matrixmul $m $t"
 		tmp=$(./matrixmul | grep -o Child | wc -l)
 		# Fill here
-		total_child=$((total_child + tmp))
+		total_child=$(($total_child + $tmp))
 	done
 done
 
+# Fill here: print total how many child processes
+# were used to calculate matrix multiplication
 echo "Total $total_child children are used to perform matrix multiplication."
-echo "..."
 
 
 
