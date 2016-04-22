@@ -94,8 +94,8 @@ int main(int argc, char** argv) {
 			}
 			
 			printf("Child process (%d)...\n", order);
-			start = order;
-			end = order + matrix_size / thread_num;
+			start = order * matrix_size / thread_num;
+			end = start + matrix_size / thread_num;
 			
 			for (i=start;i<=end;i++) {
 				for (j=0;j<matrix_size;j++) {
