@@ -21,7 +21,8 @@ public class Communicator {
 		wordList = new LinkedList<Integer>();
 		
 		lock = new Lock();
-		conVariable = new Condition2(lock);
+		speakCon = new Condition2(lock);
+		listenCon = new Condition2(lock);
 	}
 
 	/**
@@ -35,14 +36,25 @@ public class Communicator {
 	 * @param word the integer to transfer.
 	 */
 	public void speak(int word) {
-		
+		lock.acquire();
+				
 		speakBuffer.add(KThread.currentThread());
 		wordList.add(new Integer(word));
-		
-		while (KThread.currentThread() != speakBuffer.getFirst()) {
-			conVariable.sleep();
+
+		if(listenBuffer.isEmpty()){
+			speakCon.sleep();
+
+			listenCon.wake();
 		}
-		
+		else{
+			speakBuffer.removeFirst();
+			listenBuffer.removeFirst();
+
+			listenCon.wake();
+		}
+
+		lock.release();
+
 	}
 
 	/**
@@ -52,17 +64,36 @@ public class Communicator {
 	 * @return the integer transferred.
 	 */
 	public int listen() {
+		lock.acquire();
 		
 		listenBuffer.add(KThread.currentThread());
-		
-		return 0;
+
+		this.word = 0;
+
+		if(speakBuffer.isEmpty()){
+			listenCon.sleep();
+		}
+		else{
+			speakCon.wake();
+			speakBuffer.removeFirst();
+			listenBuffer.removeFirst();
+			listenCon.sleep();
+		}
+		this.word = wordList.removeFirst().intValue();
+
+		lock.release();
+
+		return this.word;
 	}
 	
 	// custom vars
 	private LinkedList<KThread> speakBuffer;
 	private LinkedList<KThread> listenBuffer;
 	private LinkedList<Integer> wordList;
+	private int word;
+	private boolean speaking = true;
 	
 	private static Lock lock = null;
-	private static Condition2 conVariable = null;
+	private static Condition2 speakCon = null;
+	private static Condition2 listenCon = null;
 }
