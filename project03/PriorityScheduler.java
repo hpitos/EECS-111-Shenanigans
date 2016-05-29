@@ -146,12 +146,19 @@ public class PriorityScheduler extends Scheduler {
 
 		public KThread nextThread() {
 			Lib.assertTrue(Machine.interrupt().disabled());
-			// implement me
-			if (lockHolder == null) {
-				pickNextThread().acquire(this);
-				return pickNextThread().thread;
+			
+			if(lockHolder != null){
+				lockHolder.donationQueue.remove(this);
+				lockHolder.getEffectivePriority();
 			}
-			return null;
+			ThreadState threadState = pickNextThread();
+			if (threadState != null) {
+				threadState.acquire(this);
+				return threadState.thread;
+			}
+			else {
+				return null;
+			}
 		}
 
 		/**
@@ -161,7 +168,7 @@ public class PriorityScheduler extends Scheduler {
 		 * @return the next thread that <tt>nextThread()</tt> would return.
 		 */
 		protected ThreadState pickNextThread() {
-			// implement me
+			
 			this.prioritySort();
 			return getThreadState(waitQueue.getFirst());
 		}
@@ -171,6 +178,7 @@ public class PriorityScheduler extends Scheduler {
 			// implement me (if you want)
 		}
 		
+		// reorganize waitQueue by priority
 		private void prioritySort() {
 			LinkedList<KThread> tempQueue = new LinkedList<KThread>();
 			
@@ -182,7 +190,11 @@ public class PriorityScheduler extends Scheduler {
 				}
 			}
 			
-			waitQueue = tempQueue;
+			waitQueue.clear();
+			
+			for (KThread thread2 : tempQueue) {
+				waitQueue.add(thread2);
+			}
 		}
 		
 		// waitQueue for storing associated threads
@@ -233,7 +245,24 @@ public class PriorityScheduler extends Scheduler {
 		 * @return the effective priority of the associated thread.
 		 */
 		public int getEffectivePriority() {
-			// implement me
+			
+			int maxPriority = priority;
+			
+			for (ThreadState threadState : donationQueue) {
+				if (threadState.priority > maxPriority) {
+					maxPriority = threadState.priority;
+				}
+			}
+			
+			for (ThreadState threadState2 : donationQueue) {
+				
+				if(threadState2.priority == maxPriority) break;
+				
+				if (donationQueue.getFirst().priority < maxPriority) {
+					threadState2.priority = maxPriority;
+				}
+			}
+			
 			return priority;
 		}
 
@@ -247,8 +276,7 @@ public class PriorityScheduler extends Scheduler {
 				return;
 
 			this.priority = priority;
-
-			// implement me
+			
 		}
 
 		/**
@@ -264,8 +292,12 @@ public class PriorityScheduler extends Scheduler {
 		 * @see nachos.threads.ThreadQueue#waitForAccess
 		 */
 		public void waitForAccess(PriorityQueue waitQueue) {
-			// implement me
+			
 			waitQueue.waitQueue.add(thread);
+			if(waitQueue.lockHolder != null){
+				waitQueue.lockHolder.getEffectivePriority();
+			}
+			
 		}
 
 		/**
@@ -279,9 +311,12 @@ public class PriorityScheduler extends Scheduler {
 		 * @see nachos.threads.ThreadQueue#nextThread
 		 */
 		public void acquire(PriorityQueue waitQueue) {
-			// implement me
+			
 			waitQueue.waitQueue.remove(thread);
 			waitQueue.lockHolder = this;
+			donationQueue.add(this);
+			waitQueue.lockHolder.getEffectivePriority();
+			
 		}
 
 		/** The thread with which this object is associated. */
@@ -289,5 +324,8 @@ public class PriorityScheduler extends Scheduler {
 
 		/** The priority of the associated thread. */
 		protected int priority;
+		
+		// list of thread states that want the lock
+		protected LinkedList<ThreadState> donationQueue = new LinkedList<ThreadState>(); 
 	}
 }
