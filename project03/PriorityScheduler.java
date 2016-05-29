@@ -317,6 +317,8 @@ public class PriorityScheduler extends Scheduler {
 			donationQueue.add(this);
 			waitQueue.lockHolder.getEffectivePriority();
 			
+			System.out.println("Priority: " + priority);
+			
 		}
 
 		/** The thread with which this object is associated. */
