@@ -361,72 +361,149 @@ public class UserProcess {
     }
 	
 	/**
-	 * Handle the create() system call.
+	 * Handle the creat() system call.
 	 */
-	private int handleCreate(int a0) {
+	private int handleCreate(int vaddr) {
 		
-		for (int i = 2; i < 16; i++) { // check for open file descriptor spot
+		// check valid address
+		if (vaddr < 0) {
+			System.out.println("Address is not valid!");
+			return -1;
+		}
+		
+		// get filename, check validity
+		String name = readVirtualMemoryString(vaddr, 256);
+		if (name == null) {
+			System.out.println("Filename is not valid!");
+			return -1;
+		}
+		
+		// check for open file descriptor spot
+		int emptySpot = -1;
+		for (int i = 2; i < 16; i++) {
 			if (fileDescriptorTable[i] == null) {
-				if (ThreadedKernel.fileSystem.open(readVirtualMemoryString(a0, 256), false) == null) { // try to open file, returns null means ready to create
-					fileDescriptorTable[i] = ThreadedKernel.fileSystem.open(readVirtualMemoryString(a0, 256), true);
-					return i;
-				}
-				else {
-					System.out.println("File already exists!"); // filename in use
-					return -1;
-				}
+				emptySpot = i;
+				break;
 			}
 		}
-		System.out.println("No file descriptor available!"); // no file descriptor available
-		return -1;
+		
+		// file descriptor table is full
+		if (emptySpot == -1) {
+			System.out.println("File descriptor table is full!");
+			return -1;
+		}
+		
+		// attempt to open file, create if it doesn't exist
+		OpenFile newFile = ThreadedKernel.fileSystem.open(name, true);
+		if (newFile.length() == 0) {
+			System.out.println("File does not exist, creating new file.");
+		}
+		fileDescriptorTable[emptySpot] = newFile;
+		System.out.println("File opened!");
+		return 0;
 		
 	}
 	
 	/**
 	 * Handle the open() system call.
 	 */
-	private int handleOpen(int a0) {
+	private int handleOpen(int vaddr) {
 		
-		for (int i = 2; i < 16; i++) { // check for open file descriptor spot
+		// check valid address
+		if (vaddr < 0) {
+			System.out.println("Address is not valid!");
+			return -1;
+		}
+		
+		// get filename, check validity
+		String name = readVirtualMemoryString(vaddr, 256);
+		if (name == null) {
+			System.out.println("Filename is not valid!");
+			return -1;
+		}
+		
+		// check for open file descriptor spot
+		int emptySpot = -1;
+		for (int i = 2; i < 16; i++) {
 			if (fileDescriptorTable[i] == null) {
-				if ((openFile = ThreadedKernel.fileSystem.open(readVirtualMemoryString(a0, 256), false)) != null) { // try to open file, success
-					System.out.println("File successfully opened.");
-					return i;
-				}
-				else {
-					System.out.println("File does not exist.");
-					return -1;
-				}
+				emptySpot = i;
+				break;
 			}
 		}
-		System.out.println("No file descriptor available!"); // no file descriptor available
-		return -1;
+		
+		// file descriptor table is full
+		if (emptySpot == -1) {
+			System.out.println("File descriptor table is full!");
+			return -1;
+		}
+		
+		// attempt to open file, returns null when file doesn't exist
+		OpenFile newFile = ThreadedKernel.fileSystem.open(name, false);
+		if (newFile == null) {
+			System.out.println("File does not exist, cannot open.");
+			return -1;
+		}
+		fileDescriptorTable[emptySpot] = newFile;
+		System.out.println("File opened!");
+		return 0;
 		
 	}
 	
 	/**
 	 * Handle the read() system call.
 	 */
-	private int handleRead(int fd, int size) { // read from file, write to console
+	private int handleRead(int fd, int bufferAddr, int size) { // read from file/console, write to virtual memory
 		
+		// initialize variables
 		byte[] readArray = new byte[size];
+		OpenFile readFile = null;
 		int readLength = 0;
-		if (fileDescriptorTable[fd] != null) {
-			readLength = readVirtualMemory(0, readArray); // TODO need to fix proper call
+		int virtualLength = 0;
+		
+		// fd cannot equal 1, cannot read from output stream
+		if (fd == 1) {
+			System.out.println("Cannot read from output stream.");
+			return -1;
+		}
+		
+		// read from console if fd = 1, else read from file
+		if (fd == 0) {
+			// write to console, returns -1 if unsuccessful
+			readFile = UserKernel.console.openForReading();
+			readLength = readFile.read(readArray, 0, size);
+			if (readLength == -1) {
+				System.out.println("Failed to read from console!");
+				readFile.close();
+				return -1;
+			}
+			readFile.close();
 		}
 		else {
-			System.out.println("File not open!");
-			return -1;
+			// file to read is not open
+			if (fileDescriptorTable[fd] == null) {
+				System.out.println("File is not open, cannot read.");
+				return -1;
+			}
+			
+			// read from file, return -1 if failed
+			readFile = fileDescriptorTable[fd];
+			readLength = readFile.read(readArray, 0, size);
+			if (readLength == -1) {
+				System.out.println("File has not been read properly.");
+				return -1;
+			}
+			else if (readLength == 0) {
+				System.out.println("No data to copy from file!");
+				return -1;
+			}
 		}
 		
-		if (readLength == 0) {
-			System.out.println("No data could be copied!");
+		// attempt to write to virtual memory
+		virtualLength = writeVirtualMemory(bufferAddr, readArray, 0, readLength);
+		if (virtualLength == 0) {
+			System.out.println("No data could be copied to virtual memory!");
 			return -1;
 		}
-
-		OpenFile consoleFile = UserKernel.console.openForWriting();
-		consoleFile.write(0, readArray, 0, readLength); // TODO fix proper call
-		consoleFile.close();
 		return 0;
 		
 	}
@@ -434,58 +511,96 @@ public class UserProcess {
 	/**
 	 * Handle the write() system call.
 	 */
-	private int handleWrite(int fd, int size) { // read from console, write to file
+	private int handleWrite(int fd, int bufferAddr, int size) { // read from vm, write to file/console
 		
+		// initialize variables
 		byte[] writeArray = new byte[size];
+		OpenFile writeFile = null;
 		int writeLength = 0;
+		int virtualLength = 0;
 		
-		OpenFile consoleFile = UserKernel.console.openForReading();
-		consoleFile.read(0, writeArray, 0, writeLength); // TODO fix proper call
-		consoleFile.close();
+		// cannot write to input stream file
+		if (fd == 0) {
+			System.out.println("Cannot write to input stream.");
+			return -1;
+		}
 		
-		if (fileDescriptorTable[fd] != null) {
-			writeLength = writeVirtualMemory(0, writeArray); // TODO need to fix proper call
+		// attempt to read from virtual memory
+		virtualLength = readVirtualMemory(bufferAddr, writeArray, 0, size);
+		if (virtualLength == 0) {
+			System.out.println("No data could be copied from virtual memory!");
+			return -1;
+		}
+		
+		// if fd == 1, write to console, else write to file
+		if (fd == 1) {
+			writeFile = UserKernel.console.openForWriting();
+			writeLength = writeFile.write(writeArray, 0, virtualLength);
+			if (writeLength == -1) {
+				System.out.println("Failed to write to console!");
+				writeFile.close();
+				return -1;
+			}
+			writeFile.close();
 		}
 		else {
-			System.out.println("File not open!");
-			return -1;
+			// file to write is not open
+			if (fileDescriptorTable[fd] == null) {
+				System.out.println("Cannot write to an unopen file.");
+				return -1;
+			}
+			
+			// write to file, return -1 if failed
+			writeFile = fileDescriptorTable[fd];
+			writeLength = writeFile.write(writeArray, 0, virtualLength);
+			if (writeLength == -1) {
+				System.out.println("Could not write to file properly.");
+				return -1;
+			}
+			else if (writeLength == 0) {
+				System.out.println("No data to copy to file!");
+				return -1;
+			}
 		}
-		
-		if (writeLength == 0) {
-			System.out.println("No data could be copied!");
-			return -1;
-		}
-		
 		return 0;
+		
 	}
 	
 	/**
 	 * Handle the close() system call.
 	 */
-	private int handleClose(int a0) { // TODO
-		String name = readVirtualMemoryString(a0, 256);
-		for(int i = 2; i < 16; i++){
-			if(fileDescriptorTable[i] != null){
-				if(fileDescriptorTable[i].getName() == name){
-					fileDescriptorTable[i] = null; //closing file
-					System.out.println("closing file: " + name);
-					return i;
-				}
-			}
+	private int handleClose(int fd) {
+		
+		// check valid file descriptor
+		if (fd < 0 || fd > 15) {
+			System.out.println("File descriptor not valid!");
+			return -1;
 		}
 		
-
-		System.out.println("File not open");
-		return -1;
+		// check if file exists
+		if (fileDescriptorTable[fd] == null) {
+			System.out.println("File descriptor does not exist!");
+			return -1;
+		}
+		
+		// closing file
+		fileDescriptorTable[fd].close();
+		System.out.println("closing file: " + fileDescriptorTable[fd].getName());
+		fileDescriptorTable[fd] = null;
+		return 0;
 		
 	}
 	
 	/**
 	 * Handle the unlink() system call.
 	 */
-	private int handleUnlink(int a0) {
-		String name = readVirtualMemoryString(a0, 256);
-		if (handleClose(a0) != -1) { // try to remove
+	private int handleUnlink(int vaddr) {
+		
+		// read filename
+		String name = readVirtualMemoryString(vaddr, 256);
+		
+		// try to remove
+		if (handleClose(vaddr) != -1) {
 			ThreadedKernel.fileSystem.remove(name);
 			System.out.println("File unlinked successfully.");
 			return 0;
@@ -580,10 +695,10 @@ public class UserProcess {
 			return handleOpen(a0);
 		
 		case syscallRead:
-			return handleRead(0, 0); // TODO
+			return handleRead(a0, a1, a2);
 			
 		case syscallWrite:
-			return handleWrite(0, 0); // TODO
+			return handleWrite(a0, a1, a2);
 			
 		case syscallClose:
 			return handleClose(a0);
@@ -647,6 +762,5 @@ public class UserProcess {
 	private static final char dbgProcess = 'a';
 	
 	// custom vars
-	private static OpenFile openFile = null;
 	private static OpenFile[] fileDescriptorTable = new OpenFile[16];
 }
