@@ -378,11 +378,22 @@ public class UserProcess {
 			return -1;
 		}
 		
+		for(int i = 2; i < 16; i++){
+			if(fileDescriptorTable[i] != null){
+				String filename = (String) fileDescriptorTable[i].getName();
+				if(filename.equals(name)){
+					System.out.println("File already opened!");
+					return i;
+				}
+			}
+		}
+		
 		// check for open file descriptor spot
 		int emptySpot = -1;
 		for (int i = 2; i < 16; i++) {
 			if (fileDescriptorTable[i] == null) {
 				emptySpot = i;
+				System.out.println("file opened at fd = " + i);
 				break;
 			}
 		}
@@ -400,7 +411,7 @@ public class UserProcess {
 		}
 		fileDescriptorTable[emptySpot] = newFile;
 		System.out.println("File opened!");
-		return 0;
+		return emptySpot;
 		
 	}
 	
@@ -422,11 +433,22 @@ public class UserProcess {
 			return -1;
 		}
 		
+		for(int i = 2; i < 16; i++){
+			if(fileDescriptorTable[i] != null){
+				String filename = (String) fileDescriptorTable[i].getName();
+				if(filename.equals(name)){
+					System.out.println("File already opened!");
+					return i;
+				}
+			}
+		}
+		
 		// check for open file descriptor spot
 		int emptySpot = -1;
 		for (int i = 2; i < 16; i++) {
 			if (fileDescriptorTable[i] == null) {
 				emptySpot = i;
+				System.out.println("file opened at fd = " + i);
 				break;
 			}
 		}
@@ -445,7 +467,7 @@ public class UserProcess {
 		}
 		fileDescriptorTable[emptySpot] = newFile;
 		System.out.println("File opened!");
-		return 0;
+		return emptySpot;
 		
 	}
 	
@@ -460,6 +482,11 @@ public class UserProcess {
 		int readLength = 0;
 		int virtualLength = 0;
 		
+		if(fd < 0 || fd > 15){
+			System.out.println("Can't access file with fd < 0 or fd > 15");
+			return -1;
+		}
+		
 		// fd cannot equal 1, cannot read from output stream
 		if (fd == 1) {
 			System.out.println("Cannot read from output stream.");
@@ -468,6 +495,7 @@ public class UserProcess {
 		
 		// read from console if fd = 1, else read from file
 		if (fd == 0) {
+			System.out.println("fd = 0");
 			// write to console, returns -1 if unsuccessful
 			readFile = UserKernel.console.openForReading();
 			readLength = readFile.read(readArray, 0, size);
@@ -488,6 +516,7 @@ public class UserProcess {
 			// read from file, return -1 if failed
 			readFile = fileDescriptorTable[fd];
 			readLength = readFile.read(readArray, 0, size);
+//			System.out.println("read " + readLength + " out of " + size);
 			if (readLength == -1) {
 				System.out.println("File has not been read properly.");
 				return -1;
@@ -500,11 +529,15 @@ public class UserProcess {
 		
 		// attempt to write to virtual memory
 		virtualLength = writeVirtualMemory(bufferAddr, readArray, 0, readLength);
+//		System.out.println("wrote " + virtualLength + " out of " + readLength + " to virtual memory");
 		if (virtualLength == 0) {
 			System.out.println("No data could be copied to virtual memory!");
 			return -1;
 		}
-		return 0;
+		
+		System.out.println("Read from " + fileDescriptorTable[fd].getName() + " successfully");
+		
+		return readLength;
 		
 	}
 	
@@ -519,6 +552,11 @@ public class UserProcess {
 		int writeLength = 0;
 		int virtualLength = 0;
 		
+		if(fd < 0 || fd > 15){
+			System.out.println("Can't access file with fd < 0 or fd > 15");
+			return -1;
+		}
+		
 		// cannot write to input stream file
 		if (fd == 0) {
 			System.out.println("Cannot write to input stream.");
@@ -527,6 +565,7 @@ public class UserProcess {
 		
 		// attempt to read from virtual memory
 		virtualLength = readVirtualMemory(bufferAddr, writeArray, 0, size);
+//		System.out.println("read " + virtualLength + " out of " + size + " from virtual memory");
 		if (virtualLength == 0) {
 			System.out.println("No data could be copied from virtual memory!");
 			return -1;
@@ -534,6 +573,7 @@ public class UserProcess {
 		
 		// if fd == 1, write to console, else write to file
 		if (fd == 1) {
+			System.out.println("fd = 1");
 			writeFile = UserKernel.console.openForWriting();
 			writeLength = writeFile.write(writeArray, 0, virtualLength);
 			if (writeLength == -1) {
@@ -562,7 +602,10 @@ public class UserProcess {
 				return -1;
 			}
 		}
-		return 0;
+		
+		System.out.println("Wrote to " + fileDescriptorTable[fd].getName() + " successfully");
+
+		return writeLength;
 		
 	}
 	
@@ -577,9 +620,9 @@ public class UserProcess {
 			return -1;
 		}
 		
-		// check if file exists
+		// check if file exists in table
 		if (fileDescriptorTable[fd] == null) {
-			System.out.println("File descriptor does not exist!");
+			System.out.println("File already closed!");
 			return -1;
 		}
 		
@@ -596,11 +639,22 @@ public class UserProcess {
 	 */
 	private int handleUnlink(int vaddr) {
 		
+		int fd = -1;
+		
 		// read filename
 		String name = readVirtualMemoryString(vaddr, 256);
 		
+		for(int i = 2; i < 16; i++){
+			if(fileDescriptorTable[i] != null){
+				String filename = (String) fileDescriptorTable[i].getName();
+				if(filename.equals(name)){
+					fd = i;
+				}
+			}
+		}
+		
 		// try to remove
-		if (handleClose(vaddr) != -1) {
+		if (handleClose(fd) != -1) {
 			ThreadedKernel.fileSystem.remove(name);
 			System.out.println("File unlinked successfully.");
 			return 0;
